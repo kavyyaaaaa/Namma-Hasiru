@@ -1,6 +1,7 @@
 package com.nammahasiru.app.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -12,12 +13,19 @@ import com.nammahasiru.app.ui.screens.FilteredPlantListScreen
 import com.nammahasiru.app.ui.screens.MapScreen
 import com.nammahasiru.app.ui.screens.PlantDetailScreen
 import com.nammahasiru.app.ui.screens.PlantListScreen
+import com.nammahasiru.app.ui.screens.RegisterScreen
+import com.nammahasiru.app.ui.screens.SignInScreen
 import com.nammahasiru.app.ui.screens.SpeciesGuideScreen
 import com.nammahasiru.app.ui.screens.SplashScreen
 import com.nammahasiru.app.ui.screens.StatusUpdateScreen
+import com.nammahasiru.app.ui.screens.WelcomeScreen
+import com.nammahasiru.app.viewmodel.AuthViewModel
 
 sealed class Screen(val route: String) {
     data object Splash       : Screen("splash")
+    data object Welcome      : Screen("welcome")
+    data object SignIn       : Screen("sign_in")
+    data object Register     : Screen("register")
     data object Dashboard    : Screen("dashboard")
     data object AddPlant     : Screen("add_plant")
     data object PlantDetail  : Screen("plant_detail/{plantId}") {
@@ -41,23 +49,74 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun NavGraph(navController: NavHostController) {
+
+    // Single shared AuthViewModel for all auth screens
+    val authViewModel: AuthViewModel = viewModel()
+
     NavHost(
         navController    = navController,
         startDestination = Screen.Splash.route
     ) {
 
-        // ── Splash ────────────────────────────────────────────────────────
+        // ── Splash ────────────────────────────────────────────────────────────
         composable(Screen.Splash.route) {
             SplashScreen(
-                onSplashComplete = {
+                onLoggedIn = {
                     navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
+                    }
+                },
+                onNotLoggedIn = {
+                    navController.navigate(Screen.Welcome.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 }
             )
         }
 
-        // ── Dashboard ─────────────────────────────────────────────────────
+        // ── Welcome ───────────────────────────────────────────────────────────
+        composable(Screen.Welcome.route) {
+            WelcomeScreen(
+                onSignIn   = { navController.navigate(Screen.SignIn.route) },
+                onRegister = { navController.navigate(Screen.Register.route) }
+            )
+        }
+
+        // ── Sign In ───────────────────────────────────────────────────────────
+        composable(Screen.SignIn.route) {
+            SignInScreen(
+                viewModel           = authViewModel,
+                onLoginSuccess      = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Welcome.route) { inclusive = true }
+                    }
+                },
+                onNavigateToRegister = {
+                    navController.navigate(Screen.Register.route) {
+                        popUpTo(Screen.SignIn.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // ── Register ──────────────────────────────────────────────────────────
+        composable(Screen.Register.route) {
+            RegisterScreen(
+                viewModel          = authViewModel,
+                onRegisterSuccess  = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Welcome.route) { inclusive = true }
+                    }
+                },
+                onNavigateToSignIn = {
+                    navController.navigate(Screen.SignIn.route) {
+                        popUpTo(Screen.Register.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // ── Dashboard ─────────────────────────────────────────────────────────
         composable(Screen.Dashboard.route) {
             DashboardScreen(
                 onAddPlant              = { navController.navigate(Screen.AddPlant.route) },
@@ -66,22 +125,27 @@ fun NavGraph(navController: NavHostController) {
                 onNavigateToPlantDetail = { plantId ->
                     navController.navigate(Screen.PlantDetail.createRoute(plantId))
                 },
-                // Stat card taps → filtered list
                 onNavigateToTotal   = { navController.navigate(Screen.FilteredList.createRoute("total")) },
                 onNavigateToAlive   = { navController.navigate(Screen.FilteredList.createRoute("alive")) },
                 onNavigateToDead    = { navController.navigate(Screen.FilteredList.createRoute("dead")) },
-                onNavigateToPending = { navController.navigate(Screen.FilteredList.createRoute("pending")) }
+                onNavigateToPending = { navController.navigate(Screen.FilteredList.createRoute("pending")) },
+                onLogout = {
+                    authViewModel.logout()
+                    navController.navigate(Screen.Welcome.route) {
+                        popUpTo(Screen.Dashboard.route) { inclusive = true }
+                    }
+                }
             )
         }
 
-        // ── Add Plant ─────────────────────────────────────────────────────
+        // ── Add Plant ─────────────────────────────────────────────────────────
         composable(Screen.AddPlant.route) {
             AddPlantScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        // ── Plant Detail ──────────────────────────────────────────────────
+        // ── Plant Detail ──────────────────────────────────────────────────────
         composable(
             route     = Screen.PlantDetail.route,
             arguments = listOf(navArgument("plantId") { type = NavType.IntType })
@@ -96,7 +160,7 @@ fun NavGraph(navController: NavHostController) {
             )
         }
 
-        // ── Status Update ─────────────────────────────────────────────────
+        // ── Status Update ─────────────────────────────────────────────────────
         composable(
             route     = Screen.StatusUpdate.route,
             arguments = listOf(navArgument("plantId") { type = NavType.IntType })
@@ -108,7 +172,7 @@ fun NavGraph(navController: NavHostController) {
             )
         }
 
-        // ── Tree Map ──────────────────────────────────────────────────────
+        // ── Tree Map ──────────────────────────────────────────────────────────
         composable(Screen.TreeMap.route) {
             MapScreen(
                 onNavigateBack        = { navController.popBackStack() },
@@ -118,14 +182,14 @@ fun NavGraph(navController: NavHostController) {
             )
         }
 
-        // ── Species Guide ─────────────────────────────────────────────────
+        // ── Species Guide ─────────────────────────────────────────────────────
         composable(Screen.SpeciesGuide.route) {
             SpeciesGuideScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        // ── Full Plant List (legacy entry from nav bar) ───────────────────
+        // ── Full Plant List ───────────────────────────────────────────────────
         composable(Screen.PlantList.route) {
             PlantListScreen(
                 onNavigateBack        = { navController.popBackStack() },
@@ -135,7 +199,7 @@ fun NavGraph(navController: NavHostController) {
             )
         }
 
-        // ── Filtered Plant List (Alive / Dead / Pending / Total) ──────────
+        // ── Filtered Plant List (Alive / Dead / Pending / Total) ──────────────
         composable(
             route     = Screen.FilteredList.route,
             arguments = listOf(navArgument("filterType") { type = NavType.StringType })
@@ -151,3 +215,4 @@ fun NavGraph(navController: NavHostController) {
         }
     }
 }
+
